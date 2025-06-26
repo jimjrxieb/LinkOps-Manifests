@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: linkops
+  namespace: argocd
+  labels:
+    app: linkops
+    project: linkops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/yourusername/linkops
+    targetRevision: HEAD
+    path: infrastructure/k8s/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: linkops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+  revisionHistoryLimit: 10 

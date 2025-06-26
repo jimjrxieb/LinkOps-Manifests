@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: linkops-base
+
+resources:
+  - namespace.yaml
+  - secrets.yaml
+  - ingress.yaml
+  - james/
+  - whis/
+  - katie/
+  - igris/
+  - frontend/
+
+commonLabels:
+  app: linkops
+  project: linkops
+  managed-by: kustomize 

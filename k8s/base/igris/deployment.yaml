@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: igris
+  namespace: linkops
+  labels:
+    app: igris
+    component: microservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: igris
+  template:
+    metadata:
+      labels:
+        app: igris
+        component: microservice
+    spec:
+      containers:
+      - name: igris
+        image: linkopsacr.azurecr.io/igris:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: linkops-secrets
+              key: database-url
+        - name: KAFKA_BROKERS
+          value: "kafka:9092"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      imagePullSecrets:
+      - name: acr-secret 
