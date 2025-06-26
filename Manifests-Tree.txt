@@ -1,0 +1,46 @@
+.
+├── Manifests-Tree.txt
+└── k8s
+    ├── app
+    │   ├── backend-deployment.yaml
+    │   ├── frontend-deployment.yaml
+    │   ├── ingress.yaml
+    │   ├── namespace.yaml
+    │   └── postgres-deployment.yaml
+    ├── argocd
+    │   └── namespace.yaml
+    └── base
+        ├── README.md
+        ├── argocd-apps
+        │   ├── kustomization.yaml
+        │   └── linkops-app.yaml
+        ├── deploy.sh
+        ├── frontend
+        │   ├── deployment.yaml
+        │   ├── ingress.yaml
+        │   ├── kustomization.yaml
+        │   └── service.yaml
+        ├── grafana-secret.yaml
+        ├── igris
+        │   ├── deployment.yaml
+        │   ├── kustomization.yaml
+        │   └── service.yaml
+        ├── ingress.yaml
+        ├── james
+        │   ├── deployment.yaml
+        │   ├── kustomization.yaml
+        │   └── service.yaml
+        ├── katie
+        │   ├── deployment.yaml
+        │   ├── kustomization.yaml
+        │   └── service.yaml
+        ├── kustomization.yaml
+        ├── namespace.yaml
+        ├── postgres-secret.yaml
+        ├── secrets.yaml
+        └── whis
+            ├── deployment.yaml
+            ├── kustomization.yaml
+            └── service.yaml
+
+10 directories, 33 files
