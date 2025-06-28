@@ -1,0 +1,19 @@
+prometheus:
+  enabled: true
+  service:
+    type: ClusterIP
+    port: 9090
+
+grafana:
+  enabled: true
+  service:
+    type: ClusterIP
+    port: 3000
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi 
