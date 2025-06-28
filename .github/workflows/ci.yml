@@ -1,0 +1,49 @@
+name: Manifests CI Check (K8s + Helm)
+
+on: [push, pull_request]
+
+jobs:
+  yaml-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yamllint
+
+      - name: YAML Lint - Kubernetes
+        run: |
+          if [ -d "k8s" ]; then
+            yamllint k8s/
+          fi
+
+      - name: YAML Lint - ArgoCD
+        run: |
+          if [ -d "argocd" ]; then
+            yamllint argocd/
+          fi
+
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+
+      - name: Helm Lint
+        run: |
+          if [ -d "helm" ]; then
+            for chart in helm/*/; do
+              if [ -f "${chart}Chart.yaml" ]; then
+                echo "Linting chart: $chart"
+                helm lint "$chart"
+              fi
+            done
+          fi 
