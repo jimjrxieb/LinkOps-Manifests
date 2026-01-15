@@ -190,12 +190,12 @@ jobs:
 
       - name: Validate Gatekeeper ConstraintTemplates
         run: |
-          # Check YAML syntax
-          python3 -c "import yaml; yaml.safe_load(open('policies/gatekeeper/constraint-templates.yaml'))"
+          # Check YAML syntax (using safe_load_all for multi-document YAML)
+          python3 -c "import yaml; list(yaml.safe_load_all(open('policies/gatekeeper/constraint-templates.yaml')))"
           echo "ConstraintTemplates YAML is valid"
 
       - name: Validate Gatekeeper Constraints
         run: |
-          # Check YAML syntax
-          python3 -c "import yaml; yaml.safe_load(open('policies/gatekeeper/constraints.yaml'))"
+          # Check YAML syntax (using safe_load_all for multi-document YAML)
+          python3 -c "import yaml; list(yaml.safe_load_all(open('policies/gatekeeper/constraints.yaml')))"
           echo "Constraints YAML is valid"
