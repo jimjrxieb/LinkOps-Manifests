@@ -3,6 +3,10 @@
 *.old
 .kube/
 
+# Helm
+helm/*/charts/
+helm/*/*.tgz
+
 # Temporary files
 *.tmp
 *.temp
@@ -15,4 +19,12 @@
 
 # OS files
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Archive (legacy files - kept locally for reference)
+_archive/
+
+# Secrets (never commit)
+*secret*.yaml.local
+*.env
+.env.* 

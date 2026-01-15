@@ -1,0 +1,15 @@
+# ArgoCD Namespace with PSS labels
+# Note: ArgoCD installation creates this namespace automatically,
+# but we define it here for declarative management
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+    app.kubernetes.io/managed-by: Helm
+    # PSS - ArgoCD needs privileged for some operations
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

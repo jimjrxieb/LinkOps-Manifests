@@ -1,0 +1,36 @@
+{{- if .Values.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "portfolio.fullname" . }}-data
+  labels:
+    {{- include "portfolio.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+{{- end }}
+---
+{{- if and .Values.chroma.enabled .Values.chroma.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "portfolio.fullname" . }}-chroma
+  labels:
+    {{- include "portfolio.labels" . | nindent 4 }}
+    app.kubernetes.io/component: chroma
+spec:
+  accessModes:
+    - {{ .Values.chroma.persistence.accessMode }}
+  {{- if .Values.chroma.persistence.storageClass }}
+  storageClassName: {{ .Values.chroma.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.chroma.persistence.size }}
+{{- end }}

@@ -1,0 +1,163 @@
+# OPA Gatekeeper Constraints for Portfolio App
+# These enforce the ConstraintTemplates on actual workloads
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredProbes
+metadata:
+  name: portfolio-require-probes
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    namespaces:
+      - "portfolio"
+      - "portfolio-*"
+  parameters:
+    probes:
+      - livenessProbe
+      - readinessProbe
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sContainerResources
+metadata:
+  name: portfolio-require-resources
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    namespaces:
+      - "portfolio"
+      - "portfolio-*"
+  parameters:
+    requireLimits: true
+    requireRequests: true
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: portfolio-allowed-repos
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    namespaces:
+      - "portfolio"
+      - "portfolio-*"
+  parameters:
+    repos:
+      # ECR repositories (update with actual account ID)
+      - "123456789012.dkr.ecr.us-east-1.amazonaws.com/"
+      # GitHub Container Registry
+      - "ghcr.io/jimjrxieb/"
+      # Official images
+      - "docker.io/library/"
+      - "chromadb/chroma"
+      - "nginx:"
+      - "python:"
+      - "node:"
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPSPRunAsNonRoot
+metadata:
+  name: portfolio-run-as-nonroot
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    namespaces:
+      - "portfolio"
+      - "portfolio-*"
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPSPReadOnlyRootFilesystem
+metadata:
+  name: portfolio-readonly-rootfs
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    namespaces:
+      - "portfolio"
+      - "portfolio-*"
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPSPDropCapabilities
+metadata:
+  name: portfolio-drop-capabilities
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    namespaces:
+      - "portfolio"
+      - "portfolio-*"
+  parameters:
+    requiredDropCapabilities:
+      - ALL
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPSPNoPrivileged
+metadata:
+  name: portfolio-no-privileged
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    namespaces:
+      - "portfolio"
+      - "portfolio-*"
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPSPNoAllowPrivilegeEscalation
+metadata:
+  name: portfolio-no-privilege-escalation
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    namespaces:
+      - "portfolio"
+      - "portfolio-*"
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: portfolio-required-labels
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    namespaces:
+      - "portfolio"
+      - "portfolio-*"
+  parameters:
+    labels:
+      - "app.kubernetes.io/name"
+      - "app.kubernetes.io/instance"

@@ -1,0 +1,22 @@
+apiVersion: v2
+name: portfolio-app
+description: Portfolio Application - AI/ML RAG-powered chatbox with React frontend and FastAPI backend
+type: application
+version: 0.2.0
+appVersion: "1.0.0"
+keywords:
+  - portfolio
+  - ai
+  - rag
+  - fastapi
+  - react
+  - chromadb
+home: https://github.com/jimjrxieb/Portfolio
+sources:
+  - https://github.com/jimjrxieb/Portfolio
+  - https://github.com/jimjrxieb/LinkOps-Manifests
+maintainers:
+  - name: Jimmie
+    email: jimmie012506@gmail.com
+annotations:
+  category: Application

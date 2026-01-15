@@ -1,0 +1,45 @@
+{{- if .Values.portfolioServiceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: portfolio-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app.kubernetes.io/name: portfolio-api
+    app.kubernetes.io/component: monitoring
+    release: {{ .Release.Name }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.portfolioServiceMonitor.namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portfolio-app
+      app.kubernetes.io/component: api
+  endpoints:
+    - port: {{ .Values.portfolioServiceMonitor.port }}
+      path: {{ .Values.portfolioServiceMonitor.path }}
+      interval: {{ .Values.portfolioServiceMonitor.interval }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: portfolio-ui
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app.kubernetes.io/name: portfolio-ui
+    app.kubernetes.io/component: monitoring
+    release: {{ .Release.Name }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.portfolioServiceMonitor.namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portfolio-app
+      app.kubernetes.io/component: ui
+  endpoints:
+    - port: {{ .Values.portfolioServiceMonitor.port }}
+      path: {{ .Values.portfolioServiceMonitor.path }}
+      interval: {{ .Values.portfolioServiceMonitor.interval }}
+{{- end }}

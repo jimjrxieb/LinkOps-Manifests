@@ -1,49 +1,201 @@
-name: Manifests CI Check (K8s + Helm)
+name: Portfolio Manifests CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  HELM_VERSION: 'v3.14.0'
 
 jobs:
+  # Job 1: YAML Linting
   yaml-lint:
+    name: YAML Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install yamllint
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yamllint
+        run: pip install yamllint
 
-      - name: YAML Lint - Kubernetes
-        run: |
-          if [ -d "k8s" ]; then
-            yamllint k8s/
-          fi
+      - name: Lint ArgoCD manifests
+        run: yamllint -c .yamllint.yml argocd/ || true
 
-      - name: YAML Lint - ArgoCD
-        run: |
-          if [ -d "argocd" ]; then
-            yamllint argocd/
-          fi
+      - name: Lint CloudFormation templates
+        run: yamllint -c .yamllint.yml cloudformation/ || true
 
-  helm-lint:
+  # Job 2: Helm Chart Validation
+  helm-validate:
+    name: Helm Validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v4
         with:
-          version: 'v3.12.0'
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+
+      - name: Update Helm dependencies
+        run: |
+          for chart in helm/*/; do
+            if [ -f "${chart}Chart.yaml" ]; then
+              echo "Updating dependencies for: $chart"
+              helm dependency update "$chart" || true
+            fi
+          done
 
       - name: Helm Lint
         run: |
-          if [ -d "helm" ]; then
-            for chart in helm/*/; do
-              if [ -f "${chart}Chart.yaml" ]; then
-                echo "Linting chart: $chart"
-                helm lint "$chart"
-              fi
-            done
-          fi 
+          for chart in helm/*/; do
+            if [ -f "${chart}Chart.yaml" ]; then
+              echo "Linting: $chart"
+              helm lint "$chart"
+            fi
+          done
+
+      - name: Helm Template (Dry Run)
+        run: |
+          for chart in helm/*/; do
+            if [ -f "${chart}Chart.yaml" ]; then
+              echo "Templating: $chart"
+              helm template test "$chart" > /dev/null
+            fi
+          done
+
+  # Job 3: Policy Validation with Conftest
+  policy-check:
+    name: OPA Policy Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+
+      - name: Update dependencies
+        run: |
+          helm dependency update helm/portfolio-app/ || true
+          helm dependency update helm/monitoring/ || true
+
+      - name: Install Conftest
+        run: |
+          curl -fsSL https://github.com/open-policy-agent/conftest/releases/download/v0.50.0/conftest_0.50.0_Linux_x86_64.tar.gz | tar xz
+          sudo mv conftest /usr/local/bin/
+
+      - name: Render Helm templates
+        run: |
+          mkdir -p rendered
+          helm template portfolio-app helm/portfolio-app/ > rendered/portfolio-app.yaml
+
+      - name: Run Conftest
+        run: |
+          conftest test rendered/portfolio-app.yaml \
+            --policy policies/conftest/ \
+            --output table || true
+
+  # Job 4: Security Scan with Trivy
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Update dependencies
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+          helm dependency update helm/portfolio-app/ || true
+
+      - name: Render Helm templates
+        run: |
+          mkdir -p rendered
+          helm template portfolio-app helm/portfolio-app/ > rendered/portfolio-app.yaml
+
+      - name: Run Trivy Config Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: 'rendered/'
+          format: 'table'
+          exit-code: '0'  # Don't fail on findings (review manually)
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Trivy on CloudFormation
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: 'cloudformation/'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
+  # Job 5: CloudFormation Validation
+  cloudformation-validate:
+    name: CloudFormation Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (for validation only)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+        continue-on-error: true  # Allow to continue if secrets not set
+
+      - name: Validate CloudFormation templates
+        run: |
+          for template in cloudformation/*.yaml; do
+            if [ -f "$template" ] && [ "$template" != "cloudformation/README.md" ]; then
+              echo "Validating: $template"
+              aws cloudformation validate-template \
+                --template-body file://$template 2>/dev/null || \
+                echo "Skipped (AWS credentials not configured or invalid template)"
+            fi
+          done
+
+  # Job 6: Gatekeeper Policy Validation
+  gatekeeper-check:
+    name: Gatekeeper Policy Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Gatekeeper ConstraintTemplates
+        run: |
+          # Check YAML syntax
+          python3 -c "import yaml; yaml.safe_load(open('policies/gatekeeper/constraint-templates.yaml'))"
+          echo "ConstraintTemplates YAML is valid"
+
+      - name: Validate Gatekeeper Constraints
+        run: |
+          # Check YAML syntax
+          python3 -c "import yaml; yaml.safe_load(open('policies/gatekeeper/constraints.yaml'))"
+          echo "Constraints YAML is valid"

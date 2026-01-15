@@ -1,19 +1,207 @@
-prometheus:
-  enabled: true
-  service:
-    type: ClusterIP
-    port: 9090
+# Monitoring Stack Values
+# Uses kube-prometheus-stack with Portfolio-specific configuration
 
-grafana:
-  enabled: true
-  service:
-    type: ClusterIP
-    port: 3000
+global:
+  namespace: monitoring
 
-resources:
-  limits:
-    cpu: 1000m
-    memory: 1Gi
-  requests:
-    cpu: 500m
-    memory: 512Mi 
+# Enable the kube-prometheus-stack dependency
+kube-prometheus-stack:
+  enabled: true
+
+  # Prometheus configuration
+  prometheus:
+    prometheusSpec:
+      retention: 15d
+      retentionSize: "10GB"
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+      # Security contexts for PSS restricted
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # ServiceMonitor selector - watch all namespaces
+      serviceMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelectorNilUsesHelmValues: false
+      # Storage
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 20Gi
+
+  # Grafana configuration
+  grafana:
+    enabled: true
+    adminPassword: "" # Set via secret in production
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 472
+      runAsGroup: 472
+      fsGroup: 472
+      seccompProfile:
+        type: RuntimeDefault
+    # Dashboards
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+          - name: 'portfolio'
+            orgId: 1
+            folder: 'Portfolio'
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/portfolio
+    # Datasources
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            url: http://monitoring-prometheus:9090
+            access: proxy
+            isDefault: true
+    # Ingress for Grafana
+    ingress:
+      enabled: false
+      # Configure if needed:
+      # ingressClassName: nginx
+      # hosts:
+      #   - grafana.example.com
+      # tls:
+      #   - secretName: grafana-tls
+      #     hosts:
+      #       - grafana.example.com
+
+  # Alertmanager configuration
+  alertmanager:
+    enabled: true
+    alertmanagerSpec:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+    config:
+      global:
+        resolve_timeout: 5m
+      route:
+        group_by: ['alertname', 'namespace']
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h
+        receiver: 'default-receiver'
+        routes:
+          - match:
+              severity: critical
+            receiver: 'critical-receiver'
+      receivers:
+        - name: 'default-receiver'
+          # Configure webhook, email, slack, etc.
+        - name: 'critical-receiver'
+          # Configure for critical alerts
+
+  # Node Exporter
+  nodeExporter:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  # Kube State Metrics
+  kubeStateMetrics:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  # Prometheus Operator
+  prometheusOperator:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+
+  # Default rules
+  defaultRules:
+    create: true
+    rules:
+      alertmanager: true
+      etcd: false  # Not applicable for most k3s/k8s setups
+      general: true
+      k8s: true
+      kubeApiserver: true
+      kubeApiserverAvailability: true
+      kubeApiserverSlos: true
+      kubelet: true
+      kubePrometheusGeneral: true
+      kubePrometheusNodeRecording: true
+      kubernetesApps: true
+      kubernetesResources: true
+      kubernetesStorage: true
+      kubernetesSystem: true
+      kubeScheduler: false
+      kubeStateMetrics: true
+      network: true
+      node: true
+      nodeExporterAlerting: true
+      nodeExporterRecording: true
+      prometheus: true
+      prometheusOperator: true
+
+# Portfolio-specific ServiceMonitor (created as additional resource)
+portfolioServiceMonitor:
+  enabled: true
+  namespace: portfolio
+  interval: 30s
+  path: /metrics
+  port: http

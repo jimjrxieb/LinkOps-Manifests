@@ -1,0 +1,236 @@
+# Portfolio Helm Chart Values
+# ArgoCD will sync changes from this repo automatically
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+global:
+  namespace: portfolio
+  imagePrefix: ghcr.io/jimjrxieb/portfolio
+
+# =============================================================================
+# API SERVICE (FastAPI Backend)
+# =============================================================================
+api:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: ghcr.io/jimjrxieb/portfolio-api
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+
+  env:
+    LLM_PROVIDER: "claude"
+    LLM_MODEL: "claude-3-5-sonnet-20241022"
+    API_PORT: "8000"
+    API_HOST: "0.0.0.0"
+    CORS_ALLOW_ORIGINS: "*"
+    RAG_NAMESPACE: "portfolio"
+    DATA_DIR: "/data"
+
+  # Secret keys to pull from external secret
+  secretKeys:
+    - CLAUDE_API_KEY
+    - OPENAI_API_KEY
+    - ELEVENLABS_API_KEY
+
+  probes:
+    readiness:
+      path: /health
+      port: 8000
+      initialDelaySeconds: 40
+      periodSeconds: 5
+      timeoutSeconds: 2
+      failureThreshold: 12
+    liveness:
+      path: /health
+      port: 8000
+      initialDelaySeconds: 60
+      periodSeconds: 10
+      timeoutSeconds: 2
+      failureThreshold: 6
+
+# =============================================================================
+# UI SERVICE (React Frontend)
+# =============================================================================
+ui:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: ghcr.io/jimjrxieb/portfolio-ui
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+  env:
+    VITE_API_BASE_URL: "http://portfolio.local/api"
+
+  probes:
+    readiness:
+      path: /
+      port: 8080
+      initialDelaySeconds: 10
+      periodSeconds: 5
+    liveness:
+      path: /
+      port: 8080
+      initialDelaySeconds: 15
+      periodSeconds: 30
+
+# =============================================================================
+# CHROMADB (Vector Database)
+# =============================================================================
+chroma:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: chromadb/chroma
+    tag: "0.4.18"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 5Gi
+    accessMode: ReadWriteOnce
+
+# =============================================================================
+# INGRESS
+# =============================================================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization"
+  host: portfolio.local
+  paths:
+    ui: /
+    api: /api
+  tls:
+    enabled: false
+    secretName: portfolio-tls
+
+# =============================================================================
+# SECURITY CONTEXT
+# =============================================================================
+securityContext:
+  pod:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+
+  container:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+
+# =============================================================================
+# NETWORK POLICY
+# =============================================================================
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx
+
+# =============================================================================
+# SERVICE ACCOUNT
+# =============================================================================
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
+# =============================================================================
+# PERSISTENCE (Shared data volume)
+# =============================================================================
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  mountPath: /data
+
+# =============================================================================
+# SECRETS
+# =============================================================================
+secrets:
+  # If true, create the secret from values below
+  # If false, expect external secret to exist with name: portfolio-api-secrets
+  create: false
+  externalSecretName: portfolio-api-secrets
+
+# =============================================================================
+# AUTOSCALING (Disabled by default for home server)
+# =============================================================================
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+
+# =============================================================================
+# NODE SELECTION
+# =============================================================================
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# =============================================================================
+# POD SETTINGS
+# =============================================================================
+podAnnotations: {}
+podLabels: {}

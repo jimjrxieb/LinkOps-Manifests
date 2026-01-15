@@ -1,0 +1,154 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM Roles for Portfolio Application (K8s Service Account integration)
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - development
+      - staging
+      - production
+    Description: Environment name
+
+  # For IRSA (EKS) - set these if using EKS
+  OIDCProviderArn:
+    Type: String
+    Default: ''
+    Description: OIDC Provider ARN for EKS IRSA (leave empty if not using EKS)
+
+  OIDCProviderUrl:
+    Type: String
+    Default: ''
+    Description: OIDC Provider URL without https:// prefix
+
+  K8sNamespace:
+    Type: String
+    Default: portfolio
+    Description: Kubernetes namespace where the application runs
+
+  K8sServiceAccountName:
+    Type: String
+    Default: portfolio-app
+    Description: Kubernetes service account name
+
+Conditions:
+  UseIRSA: !Not [!Equals [!Ref OIDCProviderArn, '']]
+
+Resources:
+  # Portfolio Application Role (for IRSA or EC2/Instance Profile)
+  PortfolioAppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'portfolio-${Environment}-app-role'
+      Description: IAM role for Portfolio application
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # For IRSA (EKS)
+          - !If
+            - UseIRSA
+            - Effect: Allow
+              Principal:
+                Federated: !Ref OIDCProviderArn
+              Action: sts:AssumeRoleWithWebIdentity
+              Condition:
+                StringEquals:
+                  !Sub '${OIDCProviderUrl}:sub': !Sub 'system:serviceaccount:${K8sNamespace}:${K8sServiceAccountName}'
+                  !Sub '${OIDCProviderUrl}:aud': 'sts.amazonaws.com'
+            - !Ref AWS::NoValue
+          # For EC2/on-prem (using instance profile or similar)
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !ImportValue
+          !Sub 'portfolio-secrets-${Environment}-SecretsAccessPolicyArn'
+        - !ImportValue
+          !Sub 'portfolio-s3-${Environment}-S3AccessPolicyArn'
+      Tags:
+        - Key: Application
+          Value: portfolio
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CI/CD Role for GitHub Actions
+  GitHubActionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'portfolio-${Environment}-github-actions'
+      Description: IAM role for GitHub Actions CI/CD
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: 'repo:jimjrxieb/Portfolio:*'
+      Policies:
+        - PolicyName: ECRPushPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:GetRepositoryPolicy
+                  - ecr:DescribeRepositories
+                  - ecr:ListImages
+                  - ecr:DescribeImages
+                  - ecr:BatchGetImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource:
+                  - !ImportValue
+                    !Sub 'portfolio-ecr-${Environment}-APIRepositoryArn'
+                  - !ImportValue
+                    !Sub 'portfolio-ecr-${Environment}-UIRepositoryArn'
+      Tags:
+        - Key: Application
+          Value: portfolio
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: ci-cd
+
+  # Instance Profile (for EC2-based K8s nodes)
+  PortfolioInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub 'portfolio-${Environment}-instance-profile'
+      Roles:
+        - !Ref PortfolioAppRole
+
+Outputs:
+  PortfolioAppRoleArn:
+    Description: Portfolio Application Role ARN
+    Value: !GetAtt PortfolioAppRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AppRoleArn'
+
+  GitHubActionsRoleArn:
+    Description: GitHub Actions Role ARN
+    Value: !GetAtt GitHubActionsRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-GitHubActionsRoleArn'
+
+  InstanceProfileArn:
+    Description: Instance Profile ARN
+    Value: !GetAtt PortfolioInstanceProfile.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceProfileArn'

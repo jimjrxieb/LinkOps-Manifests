@@ -1,106 +1,170 @@
-# LinkOps-Manifests
+# Portfolio Infrastructure Manifests
 
-Kubernetes manifests for the LinkOps application stack using GitOps with ArgoCD and Kustomize.
+Kubernetes manifests and infrastructure-as-code for the Portfolio application using GitOps with ArgoCD and Helm.
 
-## 🏗️ Structure
+## Structure
 
 ```
-k8s/
-├── base/                    # Base manifests (source of truth)
-│   ├── kustomization.yaml   # Main kustomization
-│   ├── namespace.yaml       # LinkOps namespace
-│   ├── secrets.yaml         # Application secrets
-│   ├── postgres-secret.yaml # Database credentials
-│   ├── grafana-secret.yaml  # Monitoring credentials
-│   ├── ingress.yaml         # Ingress configuration
-│   ├── james/               # James microservice
-│   ├── whis/                # Whis microservice
-│   ├── katie/               # Katie microservice
-│   ├── igris/               # Igris microservice
-│   ├── frontend/            # Frontend application
-│   └── argocd-apps/         # ArgoCD application definitions
-│       ├── kustomization.yaml
-│       └── linkops-app.yaml # App-of-Apps definition
-└── argocd/                  # ArgoCD server configuration
+LinkOps-Manifests/
+├── argocd/                     # ArgoCD Applications
+│   ├── app-of-apps.yaml        # Root application (deploy first)
+│   ├── portfolio-app.yaml      # Main Portfolio application
+│   ├── monitoring.yaml         # Prometheus/Grafana stack
+│   ├── policies.yaml           # OPA Gatekeeper policies
+│   └── README.md
+├── cloudformation/             # AWS CloudFormation templates
+│   ├── ecr-repositories.yaml   # Container registries
+│   ├── secrets.yaml            # Secrets Manager secrets
+│   ├── s3-artifacts.yaml       # Artifacts bucket
+│   ├── iam-roles.yaml          # IAM roles for K8s/CI
+│   ├── deploy.sh               # Deployment script
+│   └── README.md
+├── helm/                       # Helm Charts
+│   ├── portfolio-app/          # Main application chart
+│   │   ├── Chart.yaml
+│   │   ├── values.yaml
+│   │   └── templates/
+│   │       ├── deployment-api.yaml
+│   │       ├── deployment-ui.yaml
+│   │       ├── deployment-chroma.yaml
+│   │       ├── service.yaml
+│   │       ├── ingress.yaml
+│   │       ├── networkpolicy.yaml
+│   │       └── ...
+│   └── monitoring/             # Monitoring stack chart
+│       ├── Chart.yaml          # Uses kube-prometheus-stack
+│       ├── values.yaml
+│       └── templates/
+│           ├── servicemonitor-portfolio.yaml
+│           ├── prometheus-rules-portfolio.yaml
+│           └── grafana-dashboard-portfolio.yaml
+├── policies/                   # Security Policies
+│   ├── gatekeeper/             # OPA Gatekeeper
+│   │   ├── constraint-templates.yaml
+│   │   └── constraints.yaml
+│   ├── conftest/               # CI Policy Checks
+│   │   ├── kubernetes.rego
+│   │   └── helm.rego
+│   └── README.md
+└── .github/workflows/          # CI/CD
+    └── ci.yml
 ```
 
-## 🚀 GitOps Deployment
+## Quick Start
 
-### Prerequisites
-- ArgoCD installed in your cluster
-- Access to the LinkOps-Manifests repository
+### 1. Deploy AWS Infrastructure (if using AWS)
 
-### Deployment Steps
-
-1. **Apply the App-of-Apps:**
-   ```bash
-   kubectl apply -k k8s/base/argocd-apps/
-   ```
-
-2. **Verify Deployment:**
-   ```bash
-   kubectl get applications -n argocd
-   kubectl get pods -n linkops
-   ```
-
-3. **Access Applications:**
-   - **Frontend:** `http://linkops.local` (via ingress)
-   - **ArgoCD UI:** `http://argocd.local` (if exposed)
-
-## 🧪 Testing
-
-Run the test script to validate manifests:
 ```bash
-./test-kustomize.sh
+cd cloudformation/
+./deploy.sh production
 ```
 
-## 🔧 Customization
+### 2. Deploy ArgoCD Applications
 
-### Adding a New Service
-1. Create service directory in `base/`
-2. Add `deployment.yaml`, `service.yaml`, and `kustomization.yaml`
-3. Update `base/kustomization.yaml` to include the new service
+```bash
+# Install ArgoCD (if not installed)
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-### Environment-Specific Configurations
-Create overlays for different environments:
-```
-k8s/
-├── base/
-└── overlays/
-    ├── development/
-    ├── staging/
-    └── production/
+# Deploy App-of-Apps
+kubectl apply -f argocd/app-of-apps.yaml
 ```
 
-## 📋 Services
+### 3. Verify Deployment
 
-- **James:** Data processing microservice
-- **Whis:** AI/ML inference service
-- **Katie:** Analytics and reporting service
-- **Igris:** Authentication and authorization service
-- **Frontend:** React-based web interface
+```bash
+# Check ArgoCD applications
+kubectl get applications -n argocd
 
-## 🔐 Secrets Management
+# Check Portfolio pods
+kubectl get pods -n portfolio
 
-Secrets are managed through Kubernetes secrets:
-- `linkops-secrets`: Application secrets (API keys, etc.)
-- `postgres-secret`: Database credentials
-- `grafana-secret`: Monitoring credentials
+# Check monitoring
+kubectl get pods -n monitoring
+```
 
-## 📊 Monitoring
+## Components
 
-- **Prometheus:** Metrics collection
-- **Grafana:** Dashboards and visualization
-- **AlertManager:** Alerting and notifications
+### Portfolio Application
 
-## 🤝 Contributing
+| Component | Description | Port |
+|-----------|-------------|------|
+| API | FastAPI backend with RAG | 8000 |
+| UI | React frontend | 8080 |
+| ChromaDB | Vector database | 8000 |
+
+### Monitoring Stack
+
+- **Prometheus**: Metrics collection and alerting rules
+- **Grafana**: Dashboards and visualization
+- **Alertmanager**: Alert routing and notifications
+
+### Security Policies
+
+- **Gatekeeper**: Admission control policies
+- **Conftest**: CI/CD policy validation
+- **PSS**: Pod Security Standards (restricted)
+
+## Security Features
+
+All workloads are configured with:
+- `runAsNonRoot: true`
+- `allowPrivilegeEscalation: false`
+- `readOnlyRootFilesystem: true`
+- `capabilities.drop: [ALL]`
+- Resource limits and requests
+- Network policies
+- Pod Security Standards (restricted)
+
+## Local Development
+
+### Validate Helm Charts
+
+```bash
+# Lint charts
+helm lint helm/portfolio-app/
+helm lint helm/monitoring/
+
+# Render templates
+helm template portfolio-app helm/portfolio-app/
+
+# Test with policies
+helm template portfolio-app helm/portfolio-app/ | conftest test - --policy policies/conftest/
+```
+
+### Validate CloudFormation
+
+```bash
+aws cloudformation validate-template --template-body file://cloudformation/ecr-repositories.yaml
+```
+
+## ArgoCD Access
+
+```bash
+# Get admin password
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+
+# Port forward
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+```
+
+## CI/CD Pipeline
+
+The CI pipeline validates:
+1. YAML syntax (yamllint)
+2. Helm chart structure (helm lint)
+3. OPA policies (conftest)
+4. Security scanning (Trivy)
+5. CloudFormation templates
+
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Make changes to manifests
-4. Test with `./test-kustomize.sh`
+3. Make changes
+4. Ensure CI passes
 5. Submit a pull request
 
-## 📄 License
+## License
 
-This project is part of the LinkOps platform. 
+MIT License - See LICENSE file

@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECR Repositories for Portfolio Application
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - development
+      - staging
+      - production
+    Description: Environment name
+
+  RetentionCount:
+    Type: Number
+    Default: 30
+    Description: Number of images to retain
+
+Resources:
+  # Portfolio API Repository
+  PortfolioAPIRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub 'portfolio-api-${Environment}'
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: !Sub |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last ${RetentionCount} images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": ${RetentionCount}
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Application
+          Value: portfolio
+        - Key: Component
+          Value: api
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Portfolio UI Repository
+  PortfolioUIRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub 'portfolio-ui-${Environment}'
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: !Sub |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last ${RetentionCount} images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": ${RetentionCount}
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Application
+          Value: portfolio
+        - Key: Component
+          Value: ui
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  PortfolioAPIRepositoryUri:
+    Description: Portfolio API ECR Repository URI
+    Value: !GetAtt PortfolioAPIRepository.RepositoryUri
+    Export:
+      Name: !Sub '${AWS::StackName}-APIRepositoryUri'
+
+  PortfolioUIRepositoryUri:
+    Description: Portfolio UI ECR Repository URI
+    Value: !GetAtt PortfolioUIRepository.RepositoryUri
+    Export:
+      Name: !Sub '${AWS::StackName}-UIRepositoryUri'
+
+  PortfolioAPIRepositoryArn:
+    Description: Portfolio API ECR Repository ARN
+    Value: !GetAtt PortfolioAPIRepository.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-APIRepositoryArn'
+
+  PortfolioUIRepositoryArn:
+    Description: Portfolio UI ECR Repository ARN
+    Value: !GetAtt PortfolioUIRepository.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-UIRepositoryArn'

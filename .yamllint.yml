@@ -1,0 +1,43 @@
+# yamllint configuration for Portfolio Manifests
+---
+extends: default
+
+rules:
+  # Line length - allow longer lines for Kubernetes manifests
+  line-length:
+    max: 200
+    level: warning
+
+  # Allow inline comments
+  comments:
+    min-spaces-from-content: 1
+
+  # Truthy values - allow 'on' for GitHub Actions
+  truthy:
+    allowed-values: ['true', 'false', 'on', 'yes', 'no']
+
+  # Indentation - Kubernetes standard
+  indentation:
+    spaces: 2
+    indent-sequences: true
+
+  # Don't require document start markers
+  document-start: disable
+
+  # Allow empty values in YAML
+  empty-values: disable
+
+  # Braces spacing
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+  # Brackets spacing
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 0
+
+ignore: |
+  helm/*/charts/
+  _archive/
+  *.tgz

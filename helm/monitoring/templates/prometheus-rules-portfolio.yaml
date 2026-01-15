@@ -1,0 +1,149 @@
+{{- if .Values.portfolioServiceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: portfolio-alerts
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app.kubernetes.io/name: portfolio-alerts
+    app.kubernetes.io/component: monitoring
+    release: {{ .Release.Name }}
+spec:
+  groups:
+    - name: portfolio.rules
+      rules:
+        # API availability
+        - alert: PortfolioAPIDown
+          expr: up{job="portfolio-api"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: portfolio
+          annotations:
+            summary: "Portfolio API is down"
+            description: "Portfolio API has been unreachable for more than 2 minutes."
+
+        # High error rate
+        - alert: PortfolioAPIHighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{job="portfolio-api", status=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{job="portfolio-api"}[5m]))
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            team: portfolio
+          annotations:
+            summary: "Portfolio API high error rate"
+            description: "Portfolio API error rate is above 5% for the last 5 minutes."
+
+        # High latency
+        - alert: PortfolioAPIHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{job="portfolio-api"}[5m])) by (le)
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+            team: portfolio
+          annotations:
+            summary: "Portfolio API high latency"
+            description: "Portfolio API 95th percentile latency is above 2 seconds."
+
+        # UI availability
+        - alert: PortfolioUIDown
+          expr: up{job="portfolio-ui"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: portfolio
+          annotations:
+            summary: "Portfolio UI is down"
+            description: "Portfolio UI has been unreachable for more than 2 minutes."
+
+        # Pod restarts
+        - alert: PortfolioPodRestarts
+          expr: |
+            increase(kube_pod_container_status_restarts_total{
+              namespace="{{ .Values.portfolioServiceMonitor.namespace }}"
+            }[1h]) > 3
+          for: 5m
+          labels:
+            severity: warning
+            team: portfolio
+          annotations:
+            summary: "Portfolio pod experiencing restarts"
+            description: "Pod {{ "{{" }} $labels.pod {{ "}}" }} has restarted more than 3 times in the last hour."
+
+        # Memory pressure
+        - alert: PortfolioHighMemoryUsage
+          expr: |
+            (
+              container_memory_working_set_bytes{
+                namespace="{{ .Values.portfolioServiceMonitor.namespace }}"
+              }
+              /
+              container_spec_memory_limit_bytes{
+                namespace="{{ .Values.portfolioServiceMonitor.namespace }}"
+              }
+            ) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            team: portfolio
+          annotations:
+            summary: "Portfolio container high memory usage"
+            description: "Container {{ "{{" }} $labels.container {{ "}}" }} memory usage is above 85%."
+
+        # CPU throttling
+        - alert: PortfolioCPUThrottling
+          expr: |
+            rate(container_cpu_cfs_throttled_seconds_total{
+              namespace="{{ .Values.portfolioServiceMonitor.namespace }}"
+            }[5m]) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+            team: portfolio
+          annotations:
+            summary: "Portfolio container CPU throttling"
+            description: "Container {{ "{{" }} $labels.container {{ "}}" }} is being CPU throttled."
+
+    - name: portfolio.chroma.rules
+      rules:
+        # ChromaDB availability
+        - alert: PortfolioChromaDBDown
+          expr: up{job="portfolio-chroma"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: portfolio
+          annotations:
+            summary: "Portfolio ChromaDB is down"
+            description: "ChromaDB vector store has been unreachable for more than 2 minutes."
+
+        # ChromaDB disk usage
+        - alert: PortfolioChromaDBDiskHigh
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes{
+                namespace="{{ .Values.portfolioServiceMonitor.namespace }}",
+                persistentvolumeclaim=~".*chroma.*"
+              }
+              /
+              kubelet_volume_stats_capacity_bytes{
+                namespace="{{ .Values.portfolioServiceMonitor.namespace }}",
+                persistentvolumeclaim=~".*chroma.*"
+              }
+            ) > 0.80
+          for: 5m
+          labels:
+            severity: warning
+            team: portfolio
+          annotations:
+            summary: "Portfolio ChromaDB disk usage high"
+            description: "ChromaDB PVC usage is above 80%."
+{{- end }}

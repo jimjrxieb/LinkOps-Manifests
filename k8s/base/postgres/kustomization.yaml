@@ -1,2 +1,0 @@
-resources:
-  - postgres-secret.yaml 

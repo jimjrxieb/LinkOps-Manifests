@@ -1,0 +1,37 @@
+# ArgoCD App-of-Apps Pattern
+# This is the root application that manages all other applications
+# Deploy this first: kubectl apply -f argocd/app-of-apps.yaml
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: portfolio-root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jimjrxieb/LinkOps-Manifests.git
+    targetRevision: HEAD
+    path: argocd
+    directory:
+      recurse: false
+      include: "*.yaml"
+      exclude: "app-of-apps.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
