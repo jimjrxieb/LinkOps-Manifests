@@ -2,6 +2,7 @@
 
 > **For AI Assistants (Cursor, Claude, etc.):** Read this entire file before doing anything.
 > Execute steps ONE AT A TIME. Wait for user confirmation between major steps.
+> **This guide supports both Windows (PowerShell) and Mac/Linux (Bash).**
 
 ---
 
@@ -9,7 +10,7 @@
 
 This repo (`LinkOps-Manifests`) contains everything needed to deploy the Portfolio application to a Kubernetes cluster. It uses:
 
-- **Helm** = Package manager for Kubernetes (like apt-get for servers)
+- **Helm** = Package manager for Kubernetes (like an app store for servers)
 - **ArgoCD** = Auto-deploys changes from GitHub to your cluster
 - **CloudFormation** = Creates AWS resources (ECR, Secrets, S3)
 
@@ -17,23 +18,61 @@ This repo (`LinkOps-Manifests`) contains everything needed to deploy the Portfol
 
 ## Prerequisites Checklist
 
-Before starting, verify these are installed. Run each command:
+Before starting, verify these are installed.
 
-```bash
-# Check kubectl (talks to Kubernetes)
+### Windows (PowerShell)
+```powershell
+# Check kubectl
 kubectl version --client
 
-# Check helm (package manager)
+# Check helm
 helm version
 
-# Check AWS CLI (talks to AWS)
+# Check AWS CLI
 aws --version
 
 # Check you're connected to your cluster
 kubectl get nodes
 ```
 
-**If any command fails, stop and install that tool first.**
+### Mac/Linux (Bash)
+```bash
+kubectl version --client
+helm version
+aws --version
+kubectl get nodes
+```
+
+---
+
+## INSTALLING PREREQUISITES (Windows)
+
+If any tool is missing, install it:
+
+### Option A: Using Chocolatey (Recommended)
+```powershell
+# Install Chocolatey first (run as Administrator)
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Then install tools
+choco install kubernetes-cli -y
+choco install kubernetes-helm -y
+choco install awscli -y
+```
+
+### Option B: Using Winget
+```powershell
+winget install Kubernetes.kubectl
+winget install Helm.Helm
+winget install Amazon.AWSCLI
+```
+
+### Option C: Manual Downloads
+- **kubectl:** https://kubernetes.io/docs/tasks/tools/install-kubectl-windows/
+- **helm:** https://helm.sh/docs/intro/install/ (download .zip, extract, add to PATH)
+- **aws cli:** https://aws.amazon.com/cli/ (download installer)
 
 ---
 
@@ -51,27 +90,72 @@ STEP 5: Verify              →  Make sure it worked
 
 ## STEP 1: Deploy AWS Infrastructure
 
-**What this does:** Creates the AWS resources your app needs (container registry, secrets storage, etc.)
+**What this does:** Creates the AWS resources your app needs.
 
-```bash
+### Windows (PowerShell)
+```powershell
 # Navigate to cloudformation folder
+cd cloudformation
+
+# Set variables
+$env:ENVIRONMENT = "production"
+$env:AWS_REGION = "us-east-1"
+
+# Deploy ECR repositories
+Write-Host "Deploying ECR repositories..." -ForegroundColor Yellow
+aws cloudformation deploy `
+  --template-file ecr-repositories.yaml `
+  --stack-name portfolio-ecr-production `
+  --parameter-overrides Environment=production `
+  --capabilities CAPABILITY_IAM `
+  --region $env:AWS_REGION
+
+# Deploy Secrets
+Write-Host "Deploying Secrets Manager..." -ForegroundColor Yellow
+aws cloudformation deploy `
+  --template-file secrets.yaml `
+  --stack-name portfolio-secrets-production `
+  --parameter-overrides Environment=production `
+  --capabilities CAPABILITY_NAMED_IAM `
+  --region $env:AWS_REGION
+
+# Deploy S3
+Write-Host "Deploying S3 bucket..." -ForegroundColor Yellow
+aws cloudformation deploy `
+  --template-file s3-artifacts.yaml `
+  --stack-name portfolio-s3-production `
+  --parameter-overrides Environment=production `
+  --capabilities CAPABILITY_NAMED_IAM `
+  --region $env:AWS_REGION
+
+# Deploy IAM roles
+Write-Host "Deploying IAM roles..." -ForegroundColor Yellow
+aws cloudformation deploy `
+  --template-file iam-roles.yaml `
+  --stack-name portfolio-iam-production `
+  --parameter-overrides Environment=production `
+  --capabilities CAPABILITY_NAMED_IAM `
+  --region $env:AWS_REGION
+
+Write-Host "All stacks deployed!" -ForegroundColor Green
+```
+
+### Mac/Linux (Bash)
+```bash
 cd cloudformation/
-
-# Make the script executable
 chmod +x deploy.sh
-
-# Run the deployment (takes 5-10 minutes)
 ./deploy.sh production
 ```
 
-**Expected output:** You should see green checkmarks for each stack:
-- portfolio-ecr-production ✓
-- portfolio-secrets-production ✓
-- portfolio-s3-production ✓
-- portfolio-iam-production ✓
+**Expected output:** Each stack should complete without errors.
 
-**If it fails:** Check that your AWS credentials are configured:
+**If it fails:** Check AWS credentials:
+```powershell
+# Windows
+aws sts get-caller-identity
+```
 ```bash
+# Mac/Linux
 aws sts get-caller-identity
 ```
 
@@ -81,13 +165,28 @@ aws sts get-caller-identity
 
 **What this does:** Puts your actual API keys into AWS Secrets Manager.
 
-```bash
+### Windows (PowerShell)
+```powershell
 # Set your Claude API key (REQUIRED)
+# REPLACE the placeholder with your real key!
+aws secretsmanager put-secret-value `
+  --secret-id portfolio/production/claude-api-key `
+  --secret-string "sk-ant-api03-YOUR-ACTUAL-KEY-HERE" `
+  --region us-east-1
+
+# Set OpenAI key if you have one (OPTIONAL)
+aws secretsmanager put-secret-value `
+  --secret-id portfolio/production/openai-api-key `
+  --secret-string "sk-YOUR-OPENAI-KEY-HERE" `
+  --region us-east-1
+```
+
+### Mac/Linux (Bash)
+```bash
 aws secretsmanager put-secret-value \
   --secret-id portfolio/production/claude-api-key \
   --secret-string "sk-ant-api03-YOUR-ACTUAL-KEY-HERE"
 
-# Set OpenAI key if you have one (OPTIONAL)
 aws secretsmanager put-secret-value \
   --secret-id portfolio/production/openai-api-key \
   --secret-string "sk-YOUR-OPENAI-KEY-HERE"
@@ -99,9 +198,10 @@ aws secretsmanager put-secret-value \
 
 ## STEP 3: Install ArgoCD
 
-**What this does:** Installs the tool that auto-deploys your app when you push to GitHub.
+**What this does:** Installs the tool that auto-deploys your app.
 
-```bash
+### Windows (PowerShell)
+```powershell
 # Go back to repo root
 cd ..
 
@@ -112,9 +212,22 @@ kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 # Wait for ArgoCD to be ready (takes 2-3 minutes)
+Write-Host "Waiting for ArgoCD to be ready..." -ForegroundColor Yellow
 kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
 
 # Get the admin password (SAVE THIS!)
+Write-Host "ArgoCD Admin Password:" -ForegroundColor Green
+$password = kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}"
+[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($password))
+```
+
+### Mac/Linux (Bash)
+```bash
+cd ..
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
+
 echo "ArgoCD Admin Password:"
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
 ```
@@ -127,11 +240,18 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 **What this does:** Tells ArgoCD to watch this repo and deploy everything.
 
-```bash
+### Windows (PowerShell)
+```powershell
 # Deploy the master application
-kubectl apply -f argocd/app-of-apps.yaml
+kubectl apply -f argocd\app-of-apps.yaml
 
 # Check that it was created
+kubectl get applications -n argocd
+```
+
+### Mac/Linux (Bash)
+```bash
+kubectl apply -f argocd/app-of-apps.yaml
 kubectl get applications -n argocd
 ```
 
@@ -141,18 +261,14 @@ NAME              SYNC STATUS   HEALTH STATUS
 portfolio-root    Synced        Healthy
 ```
 
-ArgoCD will now automatically deploy:
-1. OPA Gatekeeper policies (security)
-2. Monitoring stack (Prometheus + Grafana)
-3. Portfolio application (API + UI + ChromaDB)
-
 ---
 
 ## STEP 5: Verify Deployment
 
 **Wait 5-10 minutes**, then check everything is running:
 
-```bash
+### Windows & Mac/Linux (same commands)
+```powershell
 # Check ArgoCD applications
 kubectl get applications -n argocd
 
@@ -169,29 +285,25 @@ kubectl get pods -n monitoring
 
 ## STEP 6: Access Your Apps
 
-### ArgoCD Dashboard (see deployments)
-```bash
-# Start port forward
+### ArgoCD Dashboard
+```powershell
+# Windows & Mac/Linux
 kubectl port-forward svc/argocd-server -n argocd 8080:443
-
-# Open browser: https://localhost:8080
-# Username: admin
-# Password: (from Step 3)
 ```
+Then open browser: **https://localhost:8080**
+- Username: `admin`
+- Password: (from Step 3)
 
-### Grafana Dashboard (see metrics)
-```bash
-# Start port forward
+### Grafana Dashboard
+```powershell
 kubectl port-forward svc/monitoring-grafana -n monitoring 3000:80
-
-# Open browser: http://localhost:3000
-# Username: admin
-# Password: prom-operator (default)
 ```
+Then open browser: **http://localhost:3000**
+- Username: `admin`
+- Password: `prom-operator`
 
 ### Your Portfolio App
-```bash
-# Check what IP/hostname was assigned
+```powershell
 kubectl get ingress -n portfolio
 ```
 
@@ -199,30 +311,36 @@ kubectl get ingress -n portfolio
 
 ## TROUBLESHOOTING
 
+### Problem: "kubectl not recognized"
+**Windows:** Add kubectl to your PATH or reinstall via Chocolatey.
+```powershell
+# Check where kubectl is
+Get-Command kubectl
+```
+
 ### Problem: Pods stuck in "Pending"
-```bash
-# Check what's wrong
+```powershell
 kubectl describe pod <pod-name> -n portfolio
 ```
 Usually means: Not enough CPU/memory on your nodes.
 
 ### Problem: Pods in "CrashLoopBackOff"
-```bash
-# Check the logs
+```powershell
 kubectl logs -n portfolio deployment/portfolio-api
 ```
 Usually means: Missing environment variable or secret.
 
-### Problem: ArgoCD shows "OutOfSync"
-```bash
-# Force a sync
-kubectl patch app portfolio-app -n argocd --type merge -p '{"operation": {"sync": {}}}'
+### Problem: Can't connect to cluster
+```powershell
+# Check your kubeconfig
+kubectl config view
+kubectl config current-context
 ```
 
-### Problem: Can't pull images from ECR
-```bash
-# Make sure you're logged into ECR
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+### Problem: ArgoCD shows "OutOfSync"
+```powershell
+# Force a sync
+kubectl patch app portfolio-app -n argocd --type merge -p '{\"operation\": {\"sync\": {}}}'
 ```
 
 ---
@@ -238,7 +356,7 @@ LinkOps-Manifests/
 │   ├── monitoring.yaml     ← Prometheus + Grafana
 │   └── policies.yaml       ← OPA security policies
 ├── cloudformation/          ← AWS infrastructure
-│   ├── deploy.sh           ← Run this first!
+│   ├── deploy.sh           ← For Mac/Linux
 │   ├── ecr-repositories.yaml
 │   ├── secrets.yaml
 │   ├── s3-artifacts.yaml
@@ -257,35 +375,78 @@ LinkOps-Manifests/
 
 Once everything is deployed, updating is easy:
 
-1. **Change something** in `helm/portfolio-app/values.yaml` (like image tag)
+1. **Change something** in `helm\portfolio-app\values.yaml` (like image tag)
 2. **Commit and push** to GitHub
 3. **ArgoCD automatically deploys** the change (within 3 minutes)
-
-That's it! No manual kubectl commands needed.
 
 ---
 
 ## QUICK COMMAND REFERENCE
 
-| Task | Command |
-|------|---------|
-| See all pods | `kubectl get pods -A` |
-| See ArgoCD apps | `kubectl get applications -n argocd` |
-| Check app logs | `kubectl logs -n portfolio deployment/portfolio-api` |
-| Force ArgoCD sync | `kubectl patch app portfolio-app -n argocd --type merge -p '{"operation": {"sync": {}}}'` |
-| Restart a deployment | `kubectl rollout restart deployment/portfolio-api -n portfolio` |
-| Delete everything | `kubectl delete -f argocd/app-of-apps.yaml` |
+| Task | Windows (PowerShell) | Mac/Linux |
+|------|---------------------|-----------|
+| See all pods | `kubectl get pods -A` | Same |
+| See ArgoCD apps | `kubectl get applications -n argocd` | Same |
+| Check app logs | `kubectl logs -n portfolio deployment/portfolio-api` | Same |
+| Restart deployment | `kubectl rollout restart deployment/portfolio-api -n portfolio` | Same |
+| Delete everything | `kubectl delete -f argocd\app-of-apps.yaml` | Use `/` instead of `\` |
+
+---
+
+## WINDOWS-SPECIFIC TIPS
+
+1. **Use PowerShell, not Command Prompt (cmd)**
+   - PowerShell is more powerful and supports the commands in this guide
+
+2. **Run as Administrator when installing tools**
+   - Right-click PowerShell → "Run as Administrator"
+
+3. **Path separators**
+   - Windows uses `\` (backslash)
+   - Mac/Linux uses `/` (forward slash)
+   - kubectl accepts both, but be consistent
+
+4. **Line continuation**
+   - Windows PowerShell uses `` ` `` (backtick)
+   - Mac/Linux uses `\` (backslash)
+
+5. **If kubectl is slow on Windows**
+   - This is normal the first time
+   - It's connecting to your remote cluster
 
 ---
 
 ## SUMMARY
 
+### Windows (PowerShell)
+```powershell
+# 1. Deploy AWS infrastructure
+cd cloudformation
+# (run the CloudFormation commands from Step 1)
+
+# 2. Set secrets
+aws secretsmanager put-secret-value --secret-id portfolio/production/claude-api-key --secret-string "YOUR-KEY"
+
+# 3. Install ArgoCD
+cd ..
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# 4. Deploy everything
+kubectl apply -f argocd\app-of-apps.yaml
+
+# 5. Verify
+kubectl get pods -n portfolio
 ```
-1. cd cloudformation && ./deploy.sh production     # Create AWS stuff
-2. aws secretsmanager put-secret-value ...         # Set your API keys
-3. kubectl apply -n argocd -f <argocd-install>     # Install ArgoCD
-4. kubectl apply -f argocd/app-of-apps.yaml        # Deploy everything
-5. kubectl get pods -n portfolio                    # Verify it works
+
+### Mac/Linux (Bash)
+```bash
+cd cloudformation && ./deploy.sh production
+aws secretsmanager put-secret-value --secret-id portfolio/production/claude-api-key --secret-string "YOUR-KEY"
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -f argocd/app-of-apps.yaml
+kubectl get pods -n portfolio
 ```
 
 **Total time:** About 15-20 minutes for first deployment.
@@ -293,3 +454,4 @@ That's it! No manual kubectl commands needed.
 ---
 
 *Last updated: January 2026*
+*Supports: Windows (PowerShell), Mac, Linux*
