@@ -354,6 +354,7 @@ LinkOps-Manifests/
 │   ├── app-of-apps.yaml    ← Deploy this to start everything
 │   ├── portfolio-app.yaml  ← Your main app
 │   ├── monitoring.yaml     ← Prometheus + Grafana
+│   ├── jsa-infrasec.yaml   ← Infrastructure security agent
 │   └── policies.yaml       ← OPA security policies
 ├── cloudformation/          ← AWS infrastructure
 │   ├── deploy.sh           ← For Mac/Linux
@@ -365,7 +366,20 @@ LinkOps-Manifests/
 │   ├── portfolio-app/      ← Your app's Helm chart
 │   │   ├── values.yaml     ← SETTINGS (change image tags here)
 │   │   └── templates/      ← Kubernetes manifests
-│   └── monitoring/         ← Monitoring Helm chart
+│   ├── monitoring/         ← Prometheus + Grafana Helm chart
+│   └── jsa-infrasec/       ← Infrastructure Security Agent
+│       ├── values.yaml     ← Agent configuration
+│       └── templates/      ← Deployment, RBAC, ServiceMonitor
+├── jsa-devsec/              ← DevSecOps tooling
+│   ├── terraform/          ← Terraform linters (tfsec, tflint)
+│   │   ├── linters/        ← .tfsec.yaml, .tflint.hcl
+│   │   └── fixers/         ← auto-fix.sh
+│   ├── rego/               ← OPA/Rego policy tools
+│   │   ├── linters/        ← conftest.yaml, opa-check.sh
+│   │   └── fixers/         ← auto-format.sh, policy-templates/
+│   └── yaml/               ← YAML linting tools
+│       ├── linters/        ← .yamllint.yaml, lint.sh
+│       └── fixers/         ← fix-yaml.sh, k8s-security-fixes.yaml
 └── policies/               ← OPA/Gatekeeper security policies
 ```
 

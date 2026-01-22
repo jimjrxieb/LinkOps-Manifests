@@ -1,0 +1,36 @@
+# TFSec Configuration for JSA-DevSec
+# Security scanner for Terraform code
+# https://aquasecurity.github.io/tfsec/
+
+# Minimum severity to report
+minimum_severity: LOW
+
+# Exclude specific checks (use with caution)
+exclude:
+  # Example: exclude a specific check
+  # - aws-s3-enable-bucket-logging
+
+# Include checks that are disabled by default
+include: []
+
+# Severity overrides
+severity_overrides:
+  # Make these CRITICAL (auto-fix with logging)
+  aws-iam-no-policy-wildcards: CRITICAL
+  aws-s3-enable-bucket-encryption: CRITICAL
+  aws-s3-block-public-acls: CRITICAL
+  aws-rds-encrypt-instance-storage-data: CRITICAL
+
+# Custom check paths
+custom_check_dir: ""
+
+# Exclude paths
+exclude_paths:
+  - .terraform/
+  - modules/.terraform/
+  - "**/examples/**"
+  - "**/test/**"
+
+# Output settings
+format: json
+force_all_dirs: false

@@ -1,0 +1,63 @@
+# JSA-DevSec Kubernetes Security Fixes
+# yq transformations for common security issues
+# Usage: yq eval-all '. as $item ireduce ({}; . * $item)' input.yaml k8s-security-fixes.yaml
+
+# These are templates for yq-based fixes
+# Each section shows the transformation pattern
+
+---
+# Fix 1: Add runAsNonRoot to all pods
+# yq eval '.spec.template.spec.securityContext.runAsNonRoot = true' deployment.yaml
+fix_runAsNonRoot:
+  description: "Ensure pods run as non-root"
+  rank: D
+  command: |
+    yq eval '.spec.template.spec.securityContext.runAsNonRoot = true' -i
+
+---
+# Fix 2: Drop all capabilities
+# yq eval '.spec.template.spec.containers[].securityContext.capabilities.drop = ["ALL"]' deployment.yaml
+fix_drop_capabilities:
+  description: "Drop all container capabilities"
+  rank: D
+  command: |
+    yq eval '.spec.template.spec.containers[].securityContext.capabilities.drop = ["ALL"]' -i
+
+---
+# Fix 3: Set read-only root filesystem
+fix_readOnlyRootFilesystem:
+  description: "Set read-only root filesystem"
+  rank: D
+  command: |
+    yq eval '.spec.template.spec.containers[].securityContext.readOnlyRootFilesystem = true' -i
+
+---
+# Fix 4: Disable privilege escalation
+fix_allowPrivilegeEscalation:
+  description: "Disable privilege escalation"
+  rank: D
+  command: |
+    yq eval '.spec.template.spec.containers[].securityContext.allowPrivilegeEscalation = false' -i
+
+---
+# Fix 5: Add resource limits
+fix_resource_limits:
+  description: "Add default resource limits"
+  rank: D
+  command: |
+    yq eval '
+      .spec.template.spec.containers[].resources.limits.memory = "256Mi" |
+      .spec.template.spec.containers[].resources.limits.cpu = "500m" |
+      .spec.template.spec.containers[].resources.requests.memory = "128Mi" |
+      .spec.template.spec.containers[].resources.requests.cpu = "100m"
+    ' -i
+
+---
+# Fix 6: Add required labels
+fix_labels:
+  description: "Add required Kubernetes labels"
+  rank: E
+  command: |
+    yq eval '
+      .metadata.labels["app.kubernetes.io/managed-by"] = "jsa-devsec"
+    ' -i

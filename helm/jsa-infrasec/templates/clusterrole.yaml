@@ -1,0 +1,122 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "jsa-infrasec.fullname" . }}
+  labels:
+    {{- include "jsa-infrasec.labels" . | nindent 4 }}
+rules:
+  # Core API - Read access for security analysis
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - secrets
+      - configmaps
+      - namespaces
+      - serviceaccounts
+      - nodes
+      - persistentvolumes
+      - persistentvolumeclaims
+      - events
+    verbs: ["get", "list", "watch"]
+
+  # Core API - Write access for security fixes
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - configmaps
+      - secrets
+    verbs: ["patch", "update"]
+
+  # Apps API - Deployments, StatefulSets, DaemonSets
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+      - replicasets
+    verbs: ["get", "list", "watch", "patch", "update"]
+
+  # Networking - Network policies
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - networkpolicies
+      - ingresses
+    verbs: ["get", "list", "watch", "create", "patch", "update"]
+
+  # RBAC - Role analysis
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - roles
+      - rolebindings
+      - clusterroles
+      - clusterrolebindings
+    verbs: ["get", "list", "watch"]
+
+  # Policy - Pod Security Policies (if still in use)
+  - apiGroups: ["policy"]
+    resources:
+      - podsecuritypolicies
+      - poddisruptionbudgets
+    verbs: ["get", "list", "watch"]
+
+  # OPA Gatekeeper - Constraint management
+  - apiGroups: ["constraints.gatekeeper.sh"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "patch", "update"]
+
+  - apiGroups: ["templates.gatekeeper.sh"]
+    resources: ["constrainttemplates"]
+    verbs: ["get", "list", "watch", "create", "patch", "update"]
+
+  - apiGroups: ["mutations.gatekeeper.sh"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "patch", "update"]
+
+  - apiGroups: ["status.gatekeeper.sh"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+
+  - apiGroups: ["expansion.gatekeeper.sh"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+
+  # Kyverno - Policy management
+  - apiGroups: ["kyverno.io"]
+    resources:
+      - policies
+      - clusterpolicies
+      - policyreports
+      - clusterpolicyreports
+    verbs: ["get", "list", "watch", "create", "patch", "update"]
+
+  # Admission controllers
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources:
+      - validatingwebhookconfigurations
+      - mutatingwebhookconfigurations
+    verbs: ["get", "list", "watch"]
+
+  # CRDs for custom resources
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources:
+      - customresourcedefinitions
+    verbs: ["get", "list", "watch"]
+
+  # Batch - CronJobs, Jobs
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["get", "list", "watch"]
+
+  # Autoscaling
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: ["get", "list", "watch"]
+{{- end }}

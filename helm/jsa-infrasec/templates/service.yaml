@@ -1,0 +1,18 @@
+{{- if .Values.metrics.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "jsa-infrasec.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "jsa-infrasec.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.metrics.port }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "jsa-infrasec.selectorLabels" . | nindent 4 }}
+{{- end }}

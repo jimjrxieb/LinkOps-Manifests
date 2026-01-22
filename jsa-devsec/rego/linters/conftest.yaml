@@ -1,0 +1,33 @@
+# Conftest Configuration for JSA-DevSec
+# Policy-as-Code testing framework
+# https://www.conftest.dev/
+
+# Default policy directory
+policy: policies/conftest
+
+# Namespaces to check
+namespace:
+  - main
+  - kubernetes
+  - helm
+
+# Output format (json for machine parsing)
+output: json
+
+# Fail on warnings (strict mode)
+fail-on-warn: false
+
+# Combine results into single report
+combine: true
+
+# Parse configuration
+parser: yaml
+
+# All namespaces (not just main)
+all-namespaces: true
+
+# Trace for debugging
+trace: false
+
+# Update frequency for bundle
+update: true

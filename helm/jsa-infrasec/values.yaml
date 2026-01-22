@@ -1,0 +1,252 @@
+# JSA-INFRASEC Values
+# Infrastructure Security Agent - Kubernetes, Policy-as-Code, IaC, Cloud Security
+
+# ============================================================================
+# AGENT CONFIGURATION
+# ============================================================================
+
+agent:
+  name: jsa-infrasec
+  rank: C  # E/D/C/B/S - determines automation level
+  autoFix: true
+  confidenceThreshold: 85
+  scanInterval: 300  # seconds
+  dryRun: false
+  maxConcurrentFixes: 5
+
+# ============================================================================
+# GP-API CONNECTION
+# ============================================================================
+
+gpApi:
+  # GP-API endpoint for finding submission
+  endpoint: "http://gp-api.portfolio.svc.cluster.local:8000"
+
+  # Endpoints used by agent
+  findingsEndpoint: "/api/findings"
+  batchEndpoint: "/api/findings/batch"
+  healthEndpoint: "/api/health"
+
+  # Enable API integration
+  enabled: true
+
+  # Timeout for API calls (seconds)
+  timeout: 30
+
+  # Retry configuration
+  retries: 3
+  retryDelay: 5
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+
+  # Log format: json or text
+  format: json
+
+  # Log to file in addition to stdout
+  file:
+    enabled: true
+    path: /var/log/jsa-infrasec
+    maxSize: 100Mi
+    maxAge: 7  # days
+
+  # Structured logging fields
+  fields:
+    agent: jsa-infrasec
+    component: infrastructure-security
+    version: "1.0.11"
+
+# ============================================================================
+# DOMAIN CONFIGURATION
+# ============================================================================
+
+domains:
+  kubernetes:
+    enabled: true
+    namespaces: ["*"]
+    excludeNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+
+  policy:
+    enabled: true
+    frameworks:
+      opa: true
+      gatekeeper: true
+      kyverno: true
+      conftest: true
+
+  iac:
+    enabled: true
+    providers:
+      terraform: true
+      cloudformation: false
+
+  cloud:
+    enabled: true
+    providers:
+      aws:
+        enabled: true
+      azure:
+        enabled: false
+      gcp:
+        enabled: false
+
+  secrets:
+    enabled: true
+    providers:
+      vault: false
+      awsSecretsManager: true
+      k8sSecrets: true
+
+  compliance:
+    enabled: true
+    frameworks:
+      cis: true
+      nist: true
+      soc2: true
+
+# ============================================================================
+# NOTIFICATIONS
+# ============================================================================
+
+notifications:
+  slack:
+    enabled: false
+    webhookUrlSecret:
+      enabled: false
+      name: "slack-webhook"
+      key: "webhook-url"
+    channel: "#security-alerts"
+    severities: [CRITICAL, HIGH]
+
+# ============================================================================
+# METRICS AND MONITORING
+# ============================================================================
+
+metrics:
+  enabled: true
+  port: 9100
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    # Additional labels for ServiceMonitor (for Prometheus Operator selector)
+    labels: {}
+    # Metric relabelings
+    metricRelabelings: []
+    # Target relabelings
+    relabelings: []
+
+# ============================================================================
+# RBAC
+# ============================================================================
+
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+  annotations: {}
+
+# ============================================================================
+# POD SECURITY
+# ============================================================================
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+  readOnlyRootFilesystem: true
+
+# ============================================================================
+# DEPLOYMENT
+# ============================================================================
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/linkops-industries/jsa-infrasec
+  pullPolicy: IfNotPresent
+  tag: "1.0.11"
+
+imagePullSecrets: []
+
+podAnnotations: {}
+
+podLabels:
+  app.kubernetes.io/component: infrastructure-security
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+livenessProbe:
+  httpGet:
+    path: /metrics
+    port: 9100
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  failureThreshold: 5
+
+readinessProbe:
+  httpGet:
+    path: /metrics
+    port: 9100
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+# ============================================================================
+# CRONJOBS
+# ============================================================================
+
+cronjobs:
+  logSync:
+    enabled: true
+    schedule: "*/15 * * * *"
+
+  healthReport:
+    enabled: true
+    schedule: "0 8 * * *"
+
+# ============================================================================
+# EXTRA CONFIGURATION
+# ============================================================================
+
+extraEnv:
+  - name: GP_API_URL
+    value: "http://gp-api.portfolio.svc.cluster.local:8000"
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: LOG_FORMAT
+    value: "json"
+
+extraVolumes:
+  - name: logs
+    emptyDir: {}
+
+extraVolumeMounts:
+  - name: logs
+    mountPath: /var/log/jsa-infrasec

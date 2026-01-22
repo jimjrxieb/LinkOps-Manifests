@@ -1,0 +1,17 @@
+apiVersion: v2
+name: jsa-infrasec
+description: JSA Infrastructure Security Agent - Kubernetes, Policy-as-Code, IaC, Cloud Security
+type: application
+version: 1.0.11
+appVersion: "1.0.11"
+keywords:
+  - security
+  - devsecops
+  - kubernetes
+  - opa
+  - gatekeeper
+  - terraform
+  - aws
+maintainers:
+  - name: LinkOps
+    email: security@linkops.ai
