@@ -1,0 +1,274 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  JSA-SecOps Event Infrastructure
+  EventBridge rule captures Security Hub findings and routes them to SQS
+  for processing by the JSA-SecOps daemon (GRIGENT event mode).
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging, development]
+  MaxReceiveCount:
+    Type: Number
+    Default: 3
+    Description: Max receive attempts before DLQ
+
+Resources:
+
+  # --- SQS Dead Letter Queue ---
+  SecOpsFindingsDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'jsa-secops-findings-dlq-${Environment}'
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Project
+          Value: GP-Copilot
+        - Key: Agent
+          Value: jsa-secops
+        - Key: Purpose
+          Value: dead-letter-queue
+
+  # --- SQS Main Queue ---
+  SecOpsFindingsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'jsa-secops-findings-${Environment}'
+      VisibilityTimeout: 300  # 5 min processing window
+      MessageRetentionPeriod: 1209600  # 14 days in seconds
+      ReceiveMessageWaitTimeSeconds: 20  # Long-polling (cost-efficient)
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt SecOpsFindingsDLQ.Arn
+        maxReceiveCount: !Ref MaxReceiveCount
+      Tags:
+        - Key: Project
+          Value: GP-Copilot
+        - Key: Agent
+          Value: jsa-secops
+        - Key: Purpose
+          Value: security-findings-intake
+
+  # --- SQS Policy: Allow EventBridge to send messages ---
+  SecOpsFindingsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref SecOpsFindingsQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowEventBridgeSend
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt SecOpsFindingsQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt SecurityHubFindingsRule.Arn
+
+  # --- EventBridge Rule: Capture Security Hub Findings ---
+  SecurityHubFindingsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'jsa-secops-sechub-findings-${Environment}'
+      Description: Routes Security Hub findings (imported + new) to JSA-SecOps SQS queue
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.securityhub
+        detail-type:
+          - "Security Hub Findings - Imported"
+      Targets:
+        - Id: SecOpsFindingsQueue
+          Arn: !GetAtt SecOpsFindingsQueue.Arn
+
+  # --- IAM Role for JSA-SecOps Daemon ---
+  SecOpsAgentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'jsa-secops-agent-${Environment}'
+      Description: Least-privilege role for JSA-SecOps daemon
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+          # Allow EKS pods to assume (for K8s deployment)
+          # Uncomment and fill OIDC provider when deploying to EKS:
+          # - Effect: Allow
+          #   Principal:
+          #     Federated: !Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/oidc.eks.${AWS::Region}.amazonaws.com'
+          #   Action: sts:AssumeRoleWithWebIdentity
+          #   Condition:
+          #     StringLike:
+          #       Fn::Sub: '${AWS::Region}:sub': 'system:serviceaccount:jsa-secops:*'
+      Tags:
+        - Key: Project
+          Value: GP-Copilot
+        - Key: Agent
+          Value: jsa-secops
+
+  # --- SQS Consumption Policy ---
+  SecOpsSQSPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: jsa-secops-sqs-consume
+      Roles:
+        - !Ref SecOpsAgentRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ConsumeFindings
+            Effect: Allow
+            Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
+            Resource:
+              - !GetAtt SecOpsFindingsQueue.Arn
+          - Sid: MonitorDLQ
+            Effect: Allow
+            Action:
+              - sqs:GetQueueAttributes
+            Resource:
+              - !GetAtt SecOpsFindingsDLQ.Arn
+
+  # --- Security Hub Read + Update Policy ---
+  SecOpsSecurityHubPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: jsa-secops-securityhub
+      Roles:
+        - !Ref SecOpsAgentRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ReadFindings
+            Effect: Allow
+            Action:
+              - securityhub:GetFindings
+              - securityhub:BatchGetFindings
+            Resource: '*'
+          - Sid: UpdateFindingStatus
+            Effect: Allow
+            Action:
+              - securityhub:BatchUpdateFindings
+            Resource: '*'
+
+  # --- GuardDuty Read Policy ---
+  SecOpsGuardDutyPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: jsa-secops-guardduty
+      Roles:
+        - !Ref SecOpsAgentRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ReadFindings
+            Effect: Allow
+            Action:
+              - guardduty:GetFindings
+              - guardduty:ListDetectors
+            Resource: '*'
+
+  # --- CloudTrail Lookup Policy (cheapest API) ---
+  SecOpsCloudTrailPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: jsa-secops-cloudtrail
+      Roles:
+        - !Ref SecOpsAgentRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: LookupEvents
+            Effect: Allow
+            Action:
+              - cloudtrail:LookupEvents
+            Resource: '*'
+
+  # --- Defensive Actions Policy (E-D rank auto-actions) ---
+  SecOpsDefensePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: jsa-secops-defense-actions
+      Roles:
+        - !Ref SecOpsAgentRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EC2DefensiveActions
+            Effect: Allow
+            Action:
+              - ec2:CreateSnapshot
+              - ec2:CreateTags
+              - ec2:DescribeInstances
+              - ec2:DescribeSecurityGroups
+              - ec2:RevokeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupEgress
+              - ec2:CreateNetworkAclEntry
+              - ec2:DescribeNetworkAcls
+              - ec2:CreateSecurityGroup
+              - ec2:AuthorizeSecurityGroupEgress
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: !Ref AWS::Region
+          - Sid: IAMDefensiveActions
+            Effect: Allow
+            Action:
+              - iam:UpdateAccessKey
+              - iam:ListAccessKeys
+              - iam:GetUser
+            Resource: '*'
+          - Sid: S3DefensiveActions
+            Effect: Allow
+            Action:
+              - s3:PutBucketEncryption
+              - s3:GetBucketEncryption
+            Resource: '*'
+          - Sid: STSIdentity
+            Effect: Allow
+            Action:
+              - sts:GetCallerIdentity
+            Resource: '*'
+          - Sid: TaggingActions
+            Effect: Allow
+            Action:
+              - tag:TagResources
+            Resource: '*'
+
+Outputs:
+  QueueUrl:
+    Description: SQS queue URL for JSA-SecOps daemon
+    Value: !Ref SecOpsFindingsQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-QueueUrl'
+
+  QueueArn:
+    Description: SQS queue ARN
+    Value: !GetAtt SecOpsFindingsQueue.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-QueueArn'
+
+  DLQUrl:
+    Description: Dead letter queue URL
+    Value: !Ref SecOpsFindingsDLQ
+    Export:
+      Name: !Sub '${AWS::StackName}-DLQUrl'
+
+  AgentRoleArn:
+    Description: IAM role ARN for JSA-SecOps agent
+    Value: !GetAtt SecOpsAgentRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AgentRoleArn'
+
+  EventRuleName:
+    Description: EventBridge rule name
+    Value: !Ref SecurityHubFindingsRule
